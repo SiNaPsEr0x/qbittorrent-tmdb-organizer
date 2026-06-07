@@ -4,6 +4,7 @@
 #
 # Imposta il percorso corretto basato su TMDB prima che qBittorrent
 # inizi a scaricare, evitando spostamenti e recheck aggiuntivi.
+# Pulisce automaticamente le cartelle vuote lasciate da torrent cancellati.
 #
 # QBITTORRENT - "Run external program on torrent added":
 #   python3 /percorso/tmdb_prepare.py --hash %I
@@ -88,6 +89,19 @@ def search_tmdb(title, year=None, media='movie'):
     except:
         pass
     return None, None
+
+def cleanup_empty_folders():
+    for base in [FILM_DIR, SERIE_DIR]:
+        if not os.path.isdir(base):
+            continue
+        for folder in os.listdir(base):
+            full = os.path.join(base, folder)
+            if os.path.isdir(full) and not os.listdir(full):
+                os.rmdir(full)
+                print(f"🗑️  Cartella vuota rimossa: {folder}")
+
+# Pulizia cartelle vuote lasciate da torrent cancellati
+cleanup_empty_folders()
 
 # Aspetta che qBittorrent registri il torrent
 time.sleep(3)
