@@ -1,0 +1,58 @@
+Copyright (c) 2024 SiNaPsEr0x
+All rights reserved.
+
+─────────────────────────────────────────────────────────────────────────────
+LICENZA D'USO — VISUALIZZAZIONE E CONTRIBUZIONE LIBERA, MODIFICHE RISERVATE
+─────────────────────────────────────────────────────────────────────────────
+
+1. PERMESSI CONCESSI
+
+   a) È consentito usare questo software per qualsiasi scopo, personale o
+      professionale, senza alcuna restrizione.
+
+   b) È consentito copiare e distribuire questo software nella sua forma
+      ORIGINALE e NON MODIFICATA, purché sia inclusa questa licenza e
+      venga citato l'autore originale.
+
+   c) È consentito consultare, studiare e analizzare il codice sorgente
+      per scopi educativi o di apprendimento.
+
+2. RESTRIZIONI
+
+   a) NON è consentito distribuire, pubblicare o condividere versioni
+      MODIFICATE di questo software, né come fork pubblico né come
+      progetto derivato, senza previa approvazione scritta dell'autore.
+
+   b) NON è consentito rimuovere, alterare o oscurare questa licenza,
+      il copyright o i riferimenti all'autore originale.
+
+   c) NON è consentito utilizzare il nome dell'autore o del progetto per
+      promuovere prodotti o servizi derivati senza autorizzazione.
+
+3. CONTRIBUZIONI
+
+   Chiunque desideri migliorare, correggere o estendere questo software
+   è invitato a farlo ESCLUSIVAMENTE tramite Pull Request al repository
+   originale:
+
+       https://github.com/SiNaPsEr0x/qbittorrent-tmdb-organizer
+
+   L'accettazione, il rifiuto o la modifica di qualsiasi contribuzione
+   è a esclusiva discrezione dell'autore. Le contribuzioni accettate
+   rimangono soggette a questa stessa licenza.
+
+4. NESSUNA GARANZIA
+
+   Questo software è fornito "così com'è" (AS IS), senza garanzie di
+   alcun tipo, esplicite o implicite, incluse ma non limitate a garanzie
+   di commerciabilità, idoneità a uno scopo specifico o non violazione
+   di diritti di terzi.
+
+   In nessun caso l'autore sarà responsabile per danni diretti, indiretti,
+   incidentali, speciali o consequenziali derivanti dall'uso o
+   dall'impossibilità di usare questo software.
+
+─────────────────────────────────────────────────────────────────────────────
+In sintesi: puoi usarlo liberamente, puoi studiarlo, puoi proporre modifiche
+tramite PR. Non puoi distribuire versioni modificate senza autorizzazione.
+─────────────────────────────────────────────────────────────────────────────
