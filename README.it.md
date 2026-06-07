@@ -4,22 +4,56 @@
 
 > **Sei stanco di installare Sonarr, Radarr, Plex e mille altre app solo per tenere organizzata la tua libreria?**  
 > Vuoi che dopo ogni download da qBittorrent, film e serie si sistemino da soli nelle cartelle giuste — con il titolo ufficiale, pronti per Kodi — senza toccare niente?  
-> **Questo script fa esattamente questo. Nient'altro.**
+> **Questo progetto fa esattamente questo. Nient'altro.**
 
-Uno script Python leggero che si aggancia a qBittorrent e organizza automaticamente i tuoi download in cartelle **FILM** e **SERIE TV**, usando l'API di [TMDB](https://www.themoviedb.org/) per ottenere i titoli ufficiali in italiano.
+Due script Python che si agganciano a qBittorrent e organizzano automaticamente i tuoi download in cartelle **FILM** e **SERIE TV**, usando l'API di [TMDB](https://www.themoviedb.org/) per ottenere i titoli ufficiali in italiano.
 
 ---
 
-## ✨ Cosa fa
+## 📦 Script disponibili
 
-1. Si connette a qBittorrent via API locale
-2. Per ogni torrent in `FILM/` o `SERIE/`, pulisce il nome del file rimuovendo sigle di encoding (2160p, WEB-DL, HEVC, ecc.)
-3. Cerca il titolo ufficiale su TMDB in italiano
-4. Crea la cartella con il nome pulito e sposta il file
-5. Aggiorna qBittorrent con il nuovo percorso
-6. Elimina la vecchia cartella se rimasta vuota
+### ⭐ `tmdb_prepare.py` — Consigliato
 
-> **Nota:** lo script non esegue il recheck manuale — qBittorrent esegue già il suo recheck nativo al completamento del download, eseguirlo di nuovo sarebbe solo tempo perso su file grandi.
+Viene eseguito **prima** che il download inizi. Imposta subito la cartella corretta in qBittorrent, quindi il file viene scaricato **direttamente nella destinazione finale** senza spostamenti successivi.
+
+**Vantaggi:**
+- Nessuno spostamento file dopo il download
+- Nessun recheck aggiuntivo — solo quello nativo di qBittorrent al completamento
+- Più veloce ed efficiente, soprattutto per file grandi (4K, UHD)
+- Pulizia automatica delle cartelle vuote ad ogni nuovo torrent aggiunto
+
+### `tmdb_organizer.py` — Migrazione/uso manuale
+
+Viene eseguito **dopo** il download. Sposta i file già scaricati nelle cartelle corrette basandosi su TMDB.
+
+**Quando usarlo:**
+- Per organizzare torrent **già scaricati** in passato con percorsi errati
+- Per una migrazione una-tantum della libreria esistente
+- Se vuoi riorganizzare manualmente un gruppo di file
+
+> **In sintesi:** usa `tmdb_prepare.py` per i nuovi download, usa `tmdb_organizer.py` solo se hai già una libreria da riorganizzare.
+
+---
+
+## ✨ Come funziona `tmdb_prepare.py`
+
+```
+1. Aggiungi il torrent in qBittorrent selezionando FILM/ o SERIE/
+         ↓
+2. qBittorrent scatta "Run on torrent added" → lancia tmdb_prepare.py
+         ↓
+3. Pulizia automatica delle cartelle vuote lasciate da torrent cancellati
+         ↓
+4. Lo script legge il nome del torrent e cerca su TMDB
+         ↓
+5. Crea la cartella finale (es. /FILM/Avatar - Fuoco e Cenere (2025)/)
+         ↓
+6. Imposta il percorso in qBittorrent prima che inizi il download
+         ↓
+7. qBittorrent scarica direttamente nella cartella giusta
+         ↓
+8. Recheck nativo di completamento — solo quello, nient'altro
+```
 
 ### Struttura risultante
 
@@ -43,6 +77,16 @@ Kodi leggerà automaticamente questa struttura e scaricherà locandine, trame e 
 
 ---
 
+## 🗑️ Pulizia automatica cartelle vuote
+
+qBittorrent non ha un evento nativo "on torrent deleted", quindi quando cancelli un torrent con i suoi file, la cartella creata da TMDB rimane vuota sul disco.
+
+`tmdb_prepare.py` risolve questo problema in modo intelligente: **ogni volta che aggiungi un nuovo torrent**, prima di fare qualsiasi altra cosa, scansiona le cartelle `FILM/` e `SERIE/` e rimuove automaticamente tutte le cartelle vuote lasciate da cancellazioni precedenti.
+
+Nessun servizio extra, nessun cron job, nessuna configurazione aggiuntiva. Il semplice atto di aggiungere un nuovo torrent mantiene la libreria pulita. 🧹
+
+---
+
 ## 📋 Requisiti
 
 - Python 3.8+
@@ -54,7 +98,7 @@ Kodi leggerà automaticamente questa struttura e scaricherà locandine, trame e 
 
 ## ⚙️ Configurazione
 
-Apri `tmdb_organizer.py` e modifica la sezione **CONFIGURAZIONE**:
+Apri **entrambi gli script** e modifica la sezione **CONFIGURAZIONE**:
 
 ```python
 QB_URL     = "http://localhost:8080"          # URL e porta della Web UI qBittorrent
@@ -76,104 +120,57 @@ export TMDB_TOKEN="eyJ..."
 
 ---
 
-## 🚀 Uso manuale
+## ⚡ Integrazione qBittorrent
 
-### Comandi disponibili
+### ⭐ tmdb_prepare.py — Torrent aggiunto
+
+1. Apri **qBittorrent → Strumenti → Opzioni → Download**
+2. Abilita **"Run external program on torrent added"**
+3. Inserisci:
+
+```
+python3 /percorso/tmdb_prepare.py --hash %I
+```
+
+### tmdb_organizer.py — Uso manuale o migrazione
 
 ```bash
-# Mostra cosa farebbe senza toccare niente (CONSIGLIATO la prima volta)
+# Dry run — anteprima senza modifiche
 python3 tmdb_organizer.py
-```
-> Esegue un **dry run**: analizza tutti i torrent e mostra dove sposterebbe ogni file,  
-> ma non sposta nulla e non modifica qBittorrent. Usalo sempre prima di eseguire per la prima volta.
 
----
-
-```bash
-# Esegue lo spostamento reale su tutti i torrent
+# Esecuzione reale su tutti i torrent
 python3 tmdb_organizer.py --ok
-```
-> Aggiunge il flag `--ok` per confermare l'esecuzione reale.  
-> Lo script sposta fisicamente i file, aggiorna i percorsi in qBittorrent e pulisce le cartelle vuote.
 
----
-
-```bash
-# Esegue solo su un torrent specifico tramite hash
+# Solo un torrent specifico
 python3 tmdb_organizer.py --ok --hash XXXXXXXXXX
 ```
-> `--hash` seguito dall'hash del torrent limita l'esecuzione a quel singolo torrent.  
-> Utile se vuoi riprocessare manualmente un torrent specifico senza toccare gli altri.
 
----
-
-### Riepilogo parametri
+### Riepilogo parametri `tmdb_organizer.py`
 
 | Parametro | Descrizione |
 |-----------|-------------|
-| *(nessuno)* | Dry run — solo anteprima, nessuna modifica |
+| *(nessuno)* | Dry run — solo anteprima |
 | `--ok` | Esecuzione reale |
-| `--hash XXXX` | Processa solo il torrent con quell'hash |
-| `--ok --hash XXXX` | Esecuzione reale su un singolo torrent |
-
----
-
-## ⚡ Integrazione qBittorrent (automatico a fine download)
-
-Questa è la parte più utile: lo script si esegue da solo ogni volta che qBittorrent completa un download, **senza che tu debba fare niente**.
-
-### Dove si configura
-
-1. Apri **qBittorrent**
-2. Vai in **Strumenti → Opzioni** (o `Alt+O`)
-3. Clicca sulla scheda **Download**
-4. Scorri in basso fino alla sezione **"Run external program"**
-5. Metti la spunta su **"Run external program on torrent finished"**
-6. Nel campo **Command** inserisci:
-
-```
-python3 /percorso/completo/tmdb_organizer.py --ok --hash %I
-```
-
-> Sostituisci `/percorso/completo/` con il percorso reale dove hai salvato lo script,  
-> ad esempio `/home/utente/tmdb_organizer.py` o `/mnt/Download/tmdb_organizer.py`
-
-7. Clicca **OK** per salvare
-
-### Schema visivo
-
-```
-Strumenti → Opzioni → Download
-┌──────────────────────────────────────────────────────────────────────┐
-│ Run external program                                                 │
-│ [✓] Run external program on torrent finished                         │
-│ Command: python3 /percorso/tmdb_organizer.py --ok --hash %I          │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-### Perché `--hash %I`?
-
-`%I` è un parametro speciale di qBittorrent che viene sostituito automaticamente con l'**hash univoco** del torrent appena completato. Passandolo allo script con `--hash`, si processa solo quel torrent invece di riscansionare tutta la libreria — più veloce e preciso.
-
-> **Non usare `--hash %I` quando lanci lo script manualmente** — `%I` è un placeholder di qBittorrent, non un valore reale.
+| `--hash XXXX` | Solo il torrent con quell'hash |
+| `--ok --hash XXXX` | Esecuzione reale su singolo torrent |
 
 ---
 
 ## 🛡️ Sicurezza
 
-Lo script ignora automaticamente tutti i torrent che **non** si trovano in `FILM_DIR` o `SERIE_DIR`. Download di software, giochi, musica o qualsiasi altro contenuto non vengono mai toccati.
+Entrambi gli script ignorano automaticamente tutti i torrent che **non** si trovano in `FILM_DIR` o `SERIE_DIR`. Download di software, giochi, musica o qualsiasi altro contenuto non vengono mai toccati.
 
 ---
 
 ## 🔄 Fallback
 
-Se TMDB non trova il titolo, lo script usa il **nome pulito del file** come nome cartella invece di crashare.
+Se TMDB non trova il titolo, gli script usano il **nome pulito del file** come nome cartella invece di crashare.
 
 ---
 
 ## 📦 Dipendenze automatiche
 
-Allo startup, lo script verifica che tutti i pacchetti necessari siano installati. Se mancano, li installa automaticamente via `apt`. Se la versione di `requests` è incompatibile con `chardet`, aggiorna automaticamente via `pip`.
+Allo startup, entrambi gli script verificano che tutti i pacchetti necessari siano installati. Se mancano, li installano automaticamente via `apt`. Se la versione di `requests` è incompatibile con `chardet`, aggiornano automaticamente via `pip`.
 
 ---
 
@@ -191,7 +188,7 @@ Questo progetto è nato per passione personale e per uso hobbistico.
 
 qBittorrent è uno strumento legittimo e open source utilizzato per scaricare contenuti distribuiti tramite il protocollo BitTorrent: **film e serie in pubblico dominio, rilasci sotto licenza Creative Commons, distribuzioni Linux, software open source, e qualsiasi altro contenuto per cui si dispone dei diritti necessari al download.**
 
-Questo script è un **semplice organizzatore di file**: non scarica nulla, non indicizza tracker, non facilita alcuna attività illegale. Si limita a rinominare e spostare file già presenti sul proprio disco, consultando TMDB solo per ottenere il titolo ufficiale.
+Questi script sono un **semplice organizzatore di file**: non scaricano nulla, non indicizzano tracker, non facilitano alcuna attività illegale. Si limitano a rinominare e spostare file già presenti sul proprio disco, consultando TMDB solo per ottenere il titolo ufficiale.
 
 **Chiunque utilizzi questo software è tenuto a farlo esclusivamente con contenuti per cui dispone dei diritti necessari, nel rispetto delle leggi sul diritto d'autore vigenti nel proprio paese.  
 L'autore declina ogni responsabilità per utilizzi non conformi alla normativa applicabile.**
