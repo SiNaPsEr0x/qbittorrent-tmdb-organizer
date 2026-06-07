@@ -18,6 +18,7 @@ Viene eseguito **prima** che il download inizi. Imposta subito la cartella corre
 - Nessuno spostamento file dopo il download
 - Nessun recheck aggiuntivo — solo quello nativo di qBittorrent al completamento
 - Più veloce ed efficiente, soprattutto per file grandi (4K, UHD)
+- Pulizia automatica delle cartelle vuote ad ogni nuovo torrent aggiunto
 
 ### `tmdb_organizer.py` — Migrazione/uso manuale
 
@@ -39,15 +40,17 @@ Viene eseguito **dopo** il download. Sposta i file già scaricati nelle cartelle
          ↓
 2. qBittorrent scatta "Run on torrent added" → lancia tmdb_prepare.py
          ↓
-3. Lo script legge il nome del torrent e cerca su TMDB
+3. Pulizia automatica delle cartelle vuote lasciate da torrent cancellati
          ↓
-4. Crea la cartella finale (es. /FILM/Avatar - Fuoco e Cenere (2025)/)
+4. Lo script legge il nome del torrent e cerca su TMDB
          ↓
-5. Imposta il percorso in qBittorrent prima che inizi il download
+5. Crea la cartella finale (es. /FILM/Avatar - Fuoco e Cenere (2025)/)
          ↓
-6. qBittorrent scarica direttamente nella cartella giusta
+6. Imposta il percorso in qBittorrent prima che inizi il download
          ↓
-7. Recheck nativo di completamento — solo quello, nient'altro
+7. qBittorrent scarica direttamente nella cartella giusta
+         ↓
+8. Recheck nativo di completamento — solo quello, nient'altro
 ```
 
 ### Struttura risultante
@@ -69,6 +72,16 @@ Viene eseguito **dopo** il download. Sposta i file già scaricati nelle cartelle
 ```
 
 Kodi leggerà automaticamente questa struttura e scaricherà locandine, trame e metadati senza configurazione aggiuntiva.
+
+---
+
+## 🗑️ Pulizia automatica cartelle vuote
+
+qBittorrent non ha un evento nativo "on torrent deleted", quindi quando cancelli un torrent con i suoi file, la cartella creata da TMDB rimane vuota sul disco.
+
+`tmdb_prepare.py` risolve questo problema in modo intelligente: **ogni volta che aggiungi un nuovo torrent**, prima di fare qualsiasi altra cosa, scansiona le cartelle `FILM/` e `SERIE/` e rimuove automaticamente tutte le cartelle vuote lasciate da cancellazioni precedenti.
+
+Nessun servizio extra, nessun cron job, nessuna configurazione aggiuntiva. Il semplice atto di aggiungere un nuovo torrent mantiene la libreria pulita. 🧹
 
 ---
 
