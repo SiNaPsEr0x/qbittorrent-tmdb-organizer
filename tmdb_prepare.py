@@ -11,35 +11,19 @@
 #
 # CONFIGURAZIONE:
 #   1. Imposta QB_URL con l'indirizzo della tua Web UI qBittorrent
+#      Se la Web UI richiede credenziali: export QB_USER="utente" QB_PASS="password"
 #   2. Imposta TMDB_TOKEN con il tuo Read Access Token da themoviedb.org/settings/api
 #      oppure esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
 #   3. Imposta FILM_DIR e SERIE_DIR con i percorsi delle tue cartelle
 #
-import re, os, urllib.parse, urllib.request, json, sys, subprocess, time
-
-def check_deps():
-    missing = []
-    for pkg, apt in [("requests","python3-requests"),("urllib3","python3-urllib3"),("chardet","python3-chardet")]:
-        try: __import__(pkg)
-        except ImportError: missing.append(apt)
-    if missing:
-        subprocess.run(["sudo","apt","install","-y"] + missing, check=True)
-    try:
-        import importlib.metadata as meta
-        req_ver     = tuple(int(x) for x in meta.version('requests').split('.')[:2])
-        chardet_ver = int(meta.version('chardet').split('.')[0])
-        if chardet_ver >= 6 and req_ver < (2, 31):
-            subprocess.run([sys.executable, "-m", "pip", "install",
-                            "--upgrade", "requests", "--break-system-packages", "-q"], check=True)
-            os.execv(sys.executable, [sys.executable] + sys.argv)
-    except:
-        pass
-
-check_deps()
-import requests
+# Richiede solo Python 3.8+ — nessun pacchetto esterno.
+#
+import re, os, urllib.parse, urllib.request, urllib.error, http.cookiejar, json, sys, time
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────────────────────
-QB_URL     = "http://localhost:8080"
+QB_URL     = "http://localhost:8080"          # URL Web UI qBittorrent
+QB_USER    = os.environ.get("QB_USER", "")    # vuoto se la Web UI non richiede login
+QB_PASS    = os.environ.get("QB_PASS", "")
 TMDB_TOKEN = os.environ.get("TMDB_TOKEN", "IL_TUO_TMDB_READ_ACCESS_TOKEN")
 FILM_DIR   = "/percorso/alla/tua/cartella/FILM"
 SERIE_DIR  = "/percorso/alla/tua/cartella/SERIE"
@@ -71,6 +55,10 @@ def clean_title(filename, is_serie):
         name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|HDTV|UHDrip).*', '', name, flags=re.IGNORECASE)
     return name.replace('.', ' ').strip(' -_')
 
+def is_within(path, base):
+    path, base = os.path.normpath(path), os.path.normpath(base)
+    return path == base or path.startswith(base + os.sep)
+
 def search_tmdb(title, year=None, media='movie'):
     base = f"https://api.themoviedb.org/3/search/{media}"
     params = {'query': title, 'language': 'it-IT'}
@@ -86,8 +74,8 @@ def search_tmdb(title, year=None, media='movie'):
             name = res.get('title') or res.get('name')
             year_out = (res.get('release_date','') or res.get('first_air_date',''))[:4]
             return name, year_out
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️  Ricerca TMDB fallita ({e}) — uso il nome torrent come fallback")
     return None, None
 
 def cleanup_empty_folders():
@@ -97,20 +85,49 @@ def cleanup_empty_folders():
         for folder in os.listdir(base):
             full = os.path.join(base, folder)
             if os.path.isdir(full) and not os.listdir(full):
-                os.rmdir(full)
-                print(f"🗑️  Cartella vuota rimossa: {folder}")
+                try:
+                    os.rmdir(full)
+                    print(f"🗑️  Cartella vuota rimossa: {folder}")
+                except OSError:
+                    pass  # qBittorrent potrebbe averci appena scritto dentro
+
+# ── API qBittorrent (urllib con cookie di sessione) ──────────────────────────
+_opener = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+def qb_post(path, data):
+    req = urllib.request.Request(QB_URL + path,
+                                 data=urllib.parse.urlencode(data).encode())
+    with _opener.open(req, timeout=10) as r:
+        return r.read().decode()
+
+def qb_get_json(path):
+    with _opener.open(QB_URL + path, timeout=10) as r:
+        return json.load(r)
+
+def qb_login():
+    try:
+        body = qb_post("/api/v2/auth/login", {"username": QB_USER, "password": QB_PASS})
+    except (urllib.error.URLError, OSError) as e:
+        print(f"❌ qBittorrent non raggiungibile su {QB_URL}: {e}")
+        sys.exit(1)
+    if body.strip() != "Ok.":
+        print("❌ Login Web UI fallito: controlla QB_USER/QB_PASS o le impostazioni della Web UI")
+        sys.exit(1)
 
 # Pulizia cartelle vuote lasciate da torrent cancellati
 cleanup_empty_folders()
 
-# Aspetta che qBittorrent registri il torrent
-time.sleep(3)
+qb_login()
 
-s = requests.Session()
-s.post(f"{QB_URL}/api/v2/auth/login", data={"username": "", "password": ""})
-
-torrents = s.get(f"{QB_URL}/api/v2/torrents/info").json()
-torrent  = next((t for t in torrents if t.get('hash','').lower() == HASH), None)
+# Aspetta che qBittorrent registri il torrent appena aggiunto
+torrent = None
+for attempt in range(10):
+    torrents = qb_get_json("/api/v2/torrents/info")
+    torrent  = next((t for t in torrents if t.get('hash','').lower() == HASH), None)
+    if torrent:
+        break
+    time.sleep(1)
 
 if not torrent:
     print(f"❌ Torrent {HASH} non trovato")
@@ -119,8 +136,8 @@ if not torrent:
 name      = torrent['name']
 save_path = torrent['save_path'].rstrip('/')
 
-is_film  = FILM_DIR  in save_path
-is_serie = SERIE_DIR in save_path
+is_film  = is_within(save_path, FILM_DIR)
+is_serie = is_within(save_path, SERIE_DIR)
 
 if not is_film and not is_serie:
     print(f"⏭️  Ignorato (non in FILM/SERIE): {name}")
@@ -148,11 +165,11 @@ base_dir = FILM_DIR if is_film else SERIE_DIR
 dst_dir  = os.path.join(base_dir, folder_name)
 
 os.makedirs(dst_dir, exist_ok=True)
-r = s.post(f"{QB_URL}/api/v2/torrents/setLocation",
-           data={"hashes": HASH, "location": dst_dir})
+try:
+    qb_post("/api/v2/torrents/setLocation", {"hashes": HASH, "location": dst_dir})
+except urllib.error.HTTPError as e:
+    print(f"❌ setLocation fallito: {e.read().decode(errors='replace')}")
+    sys.exit(1)
 
-if r.status_code == 200:
-    print(f"✅ [{source}] {folder_name}")
-    print(f"   Percorso impostato: {dst_dir}")
-else:
-    print(f"❌ setLocation fallito: {r.text}")
+print(f"✅ [{source}] {folder_name}")
+print(f"   Percorso impostato: {dst_dir}")

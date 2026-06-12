@@ -89,10 +89,9 @@ Nessun servizio extra, nessun cron job, nessuna configurazione aggiuntiva. Il se
 
 ## 📋 Requisiti
 
-- Python 3.8+
+- Python 3.8+ — **nessun pacchetto esterno**, solo libreria standard
 - qBittorrent con Web UI abilitata
 - API Key TMDB gratuita → [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api)
-- Pacchetti: `python3-requests`, `python3-urllib3`, `python3-chardet` (installati automaticamente se mancanti)
 
 ---
 
@@ -116,6 +115,15 @@ SERIE_DIR  = "/percorso/alla/tua/cartella/SERIE"  # Cartella dove salvi le serie
 
 ```bash
 export TMDB_TOKEN="eyJ..."
+```
+
+### Credenziali Web UI (opzionali)
+
+Se la Web UI di qBittorrent richiede il login (cioè non hai abilitato "Salta autenticazione per i client su localhost"), esporta le credenziali come variabili d'ambiente:
+
+```bash
+export QB_USER="utente"
+export QB_PASS="password"
 ```
 
 ---
@@ -168,9 +176,9 @@ Se TMDB non trova il titolo, gli script usano il **nome pulito del file** come n
 
 ---
 
-## 📦 Dipendenze automatiche
+## 📦 Zero dipendenze
 
-Allo startup, entrambi gli script verificano che tutti i pacchetti necessari siano installati. Se mancano, li installano automaticamente via `apt`. Se la versione di `requests` è incompatibile con `chardet`, aggiornano automaticamente via `pip`.
+Gli script usano esclusivamente la libreria standard di Python: nessun pacchetto da installare, nessun `pip`, nessun `apt`. Basta copiarli e funzionano su qualsiasi sistema con Python 3.8+.
 
 ---
 
