@@ -51,8 +51,11 @@ def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', ' -', name).strip()
 
 def strip_release_group(name):
-    # Rimuove [Group] o (Group) all'inizio del nome
-    return re.sub(r'^\s*[\[\(][^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
+    # [Group] o (Group) all'inizio del nome
+    name = re.sub(r'^\s*[\[\(][^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
+    # blocchi tra parentesi quadre ovunque nel nome (es. [ITA], [x265-Grp])
+    name = re.sub(r'\[[^\]]{1,40}\]', ' ', name)
+    return name
 
 def clean_title(filename, is_serie):
     name = re.sub(r'\.(mkv|avi|mp4)$', '', filename, flags=re.IGNORECASE)
@@ -70,7 +73,9 @@ def clean_title(filename, is_serie):
             name = name[:years[-1].start()]
         name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
                       '', name, flags=re.IGNORECASE)
-    return name.replace('.', ' ').strip(' -_')
+    # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG)
+    name = re.sub(r'-[A-Za-z0-9]{2,20}$', '', name)
+    return re.sub(r'\s{2,}', ' ', name.replace('.', ' ')).strip(' -_')
 
 def extract_year(name):
     # Ultimo anno nel nome = anno di uscita (il primo puo' far parte del titolo)
