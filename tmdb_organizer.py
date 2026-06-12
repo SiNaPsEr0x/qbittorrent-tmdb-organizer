@@ -76,6 +76,8 @@ def clean_title(filename, is_serie):
     # tag di qualita': utili anche per le serie senza SxxExx nel nome
     name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
                   '', name, flags=re.IGNORECASE)
+    # residui a fine nome dopo il troncamento (es. "Nuremberg.(" da "Nuremberg.(2025)")
+    name = re.sub(r'[\s.\-_\(\[]+$', '', name)
     # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG); solo su
     # nomi scene-style con punti, per non troncare titoli come "Spider-Man"
     if '.' in name:
@@ -95,8 +97,13 @@ def search_tmdb(title, year=None, media='movie', retries=2):
     base = f"https://api.themoviedb.org/3/search/{media}"
     params = {'query': title, 'language': 'it-IT'}
     if year: params['year' if media == 'movie' else 'first_air_date_year'] = year
+    headers = {}
+    if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
+        params['api_key'] = TMDB_TOKEN              # API Key (v3)
+    else:
+        headers['Authorization'] = f'Bearer {TMDB_TOKEN}'  # Read Access Token (v4)
     url = base + '?' + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {TMDB_TOKEN}'})
+    req = urllib.request.Request(url, headers=headers)
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=8) as r:
