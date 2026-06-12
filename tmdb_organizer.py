@@ -14,8 +14,10 @@
 # CONFIGURAZIONE:
 #   1. Imposta QB_URL con l'indirizzo della tua Web UI qBittorrent
 #      Se la Web UI richiede credenziali: export QB_USER="utente" QB_PASS="password"
-#   2. Imposta TMDB_TOKEN con il tuo Read Access Token da themoviedb.org/settings/api
-#      oppure esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
+#   2. Imposta TMDB_TOKEN con il tuo "API Read Access Token" da
+#      themoviedb.org/settings/api: e' quello LUNGO che inizia con "eyJ".
+#      NON usare la "API Key" corta (32 caratteri): non funziona.
+#      In alternativa esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
 #   3. Imposta FILM_DIR e SERIE_DIR con i percorsi delle tue cartelle
 #
 # STRUTTURA RISULTANTE:
@@ -48,6 +50,12 @@ if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
     print("❌ TMDB_TOKEN non configurato.")
     print("   Ottieni il token su: https://www.themoviedb.org/settings/api")
     print("   Poi impostalo nel file o con: export TMDB_TOKEN=\"eyJ...\"")
+    sys.exit(1)
+
+if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
+    print("❌ TMDB_TOKEN e' una 'API Key' (v3): TMDB risponderebbe 401 a ogni ricerca.")
+    print("   Serve l'API Read Access Token (quello LUNGO che inizia con 'eyJ').")
+    print("   Lo trovi su: https://www.themoviedb.org/settings/api → 'API Read Access Token'")
     sys.exit(1)
 
 def safe_name(name):
@@ -97,13 +105,8 @@ def search_tmdb(title, year=None, media='movie', retries=2):
     base = f"https://api.themoviedb.org/3/search/{media}"
     params = {'query': title, 'language': 'it-IT'}
     if year: params['year' if media == 'movie' else 'first_air_date_year'] = year
-    headers = {}
-    if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
-        params['api_key'] = TMDB_TOKEN              # API Key (v3)
-    else:
-        headers['Authorization'] = f'Bearer {TMDB_TOKEN}'  # Read Access Token (v4)
     url = base + '?' + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {TMDB_TOKEN}'})
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=8) as r:
