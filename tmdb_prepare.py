@@ -44,15 +44,19 @@ if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
     print("   Ottieni il token su: https://www.themoviedb.org/settings/api")
     sys.exit(1)
 
-idx  = sys.argv.index("--hash")
+idx = sys.argv.index("--hash")
+if idx + 1 >= len(sys.argv):
+    print("ERRORE Uso: python3 tmdb_prepare.py --hash <hash>")
+    sys.exit(1)
 HASH = sys.argv[idx + 1].lower()
 
 def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', ' -', name).strip()
 
 def strip_release_group(name):
-    # [Group] o (Group) all'inizio del nome
-    name = re.sub(r'^\s*[\[\(][^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
+    # [Group] o (Group) all'inizio del nome; deve contenere almeno una lettera
+    # per non mangiare titoli come "(500).Days.of.Summer"
+    name = re.sub(r'^\s*[\[\(](?=[^\]\)]*[A-Za-z])[^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
     # blocchi tra parentesi quadre ovunque nel nome (es. [ITA], [x265-Grp])
     name = re.sub(r'\[[^\]]{1,40}\]', ' ', name)
     return name
@@ -67,14 +71,17 @@ def clean_title(filename, is_serie):
         # Usa l'ULTIMO anno trovato: gestisce titoli che contengono un anno
         # (es. "Blade.Runner.2049.2017..." -> tronca a "Blade Runner 2049").
         # Lookaround: i delimitatori non vengono consumati, cosi' anni adiacenti
-        # (".2049.2017.") vengono trovati entrambi.
-        years = list(re.finditer(r'(?<=[\. \(])(19|20)\d{2}(?=[\. \)]|$)', name))
+        # (".2049.2017.") vengono trovati entrambi. Il '-' copre "Titolo.2024-GRP".
+        years = list(re.finditer(r'(?<=[\. \(])(19|20)\d{2}(?=[\. \)\-]|$)', name))
         if years:
             name = name[:years[-1].start()]
-        name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
-                      '', name, flags=re.IGNORECASE)
-    # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG)
-    name = re.sub(r'-[A-Za-z0-9]{2,20}$', '', name)
+    # tag di qualita': utili anche per le serie senza SxxExx nel nome
+    name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
+                  '', name, flags=re.IGNORECASE)
+    # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG); solo su
+    # nomi scene-style con punti, per non troncare titoli come "Spider-Man"
+    if '.' in name:
+        name = re.sub(r'-[A-Za-z0-9]{2,20}$', '', name)
     return re.sub(r'\s{2,}', ' ', name.replace('.', ' ')).strip(' -_')
 
 def extract_year(name):
@@ -218,8 +225,9 @@ dst_dir  = os.path.join(base_dir, folder_name)
 os.makedirs(dst_dir, exist_ok=True)
 try:
     qb_post("/api/v2/torrents/setLocation", {"hashes": HASH, "location": dst_dir})
-except urllib.error.HTTPError as e:
-    print(f"ERRORE setLocation fallito: {e.read().decode(errors='replace')}")
+except (urllib.error.URLError, OSError) as e:
+    detail = e.read().decode(errors='replace') if isinstance(e, urllib.error.HTTPError) else str(e)
+    print(f"ERRORE setLocation fallito: {detail}")
     qb_start(HASH)  # non lasciare il torrent fermo per sempre
     sys.exit(1)
 
