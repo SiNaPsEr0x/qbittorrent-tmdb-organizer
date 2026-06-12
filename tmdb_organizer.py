@@ -24,7 +24,7 @@
 #
 # Richiede solo Python 3.8+ — nessun pacchetto esterno.
 #
-import re, os, shutil, urllib.parse, urllib.request, urllib.error, http.cookiejar, json, sys
+import re, os, shutil, urllib.parse, urllib.request, urllib.error, http.cookiejar, json, sys, time
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────────────────────
 QB_URL     = "http://localhost:8080"          # URL Web UI qBittorrent
@@ -53,38 +53,66 @@ if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
 def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', ' -', name).strip()
 
+def strip_release_group(name):
+    # [Group] o (Group) all'inizio del nome; deve contenere almeno una lettera
+    # per non mangiare titoli come "(500).Days.of.Summer"
+    name = re.sub(r'^\s*[\[\(](?=[^\]\)]*[A-Za-z])[^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
+    # blocchi tra parentesi quadre ovunque nel nome (es. [ITA], [x265-Grp])
+    name = re.sub(r'\[[^\]]{1,40}\]', ' ', name)
+    return name
+
 def clean_title(filename, is_serie):
     name = re.sub(r'\.(mkv|avi|mp4)$', '', filename, flags=re.IGNORECASE)
+    name = strip_release_group(name)
     if is_serie:
         m = re.search(r'[Ss]\d+[Ee]\d+', name)
         if m: name = name[:m.start()]
     else:
-        m = re.search(r'[\. ](19|20)\d{2}[\. ]', name)
-        if m: name = name[:m.start()]
-        name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|HDTV|UHDrip).*', '', name, flags=re.IGNORECASE)
-    return name.replace('.', ' ').strip(' -_')
+        # Usa l'ULTIMO anno trovato: gestisce titoli che contengono un anno
+        # (es. "Blade.Runner.2049.2017..." -> tronca a "Blade Runner 2049").
+        years = list(re.finditer(r'(?<=[\. \(])(19|20)\d{2}(?=[\. \)\-]|$)', name))
+        if years:
+            name = name[:years[-1].start()]
+    # tag di qualita': utili anche per le serie senza SxxExx nel nome
+    name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
+                  '', name, flags=re.IGNORECASE)
+    # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG); solo su
+    # nomi scene-style con punti, per non troncare titoli come "Spider-Man"
+    if '.' in name:
+        name = re.sub(r'-[A-Za-z0-9]{2,20}$', '', name)
+    return re.sub(r'\s{2,}', ' ', name.replace('.', ' ')).strip(' -_')
+
+def extract_year(name):
+    # Ultimo anno nel nome = anno di uscita (il primo puo' far parte del titolo)
+    years = re.findall(r'(?:19|20)\d{2}', name)
+    return years[-1] if years else None
 
 def is_within(path, base):
     path, base = os.path.normpath(path), os.path.normpath(base)
     return path == base or path.startswith(base + os.sep)
 
-def search_tmdb(title, year=None, media='movie'):
+def search_tmdb(title, year=None, media='movie', retries=2):
     base = f"https://api.themoviedb.org/3/search/{media}"
     params = {'query': title, 'language': 'it-IT'}
     if year: params['year' if media == 'movie' else 'first_air_date_year'] = year
     url = base + '?' + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={'Authorization': f'Bearer {TMDB_TOKEN}'})
-    try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.load(r)
-        results = data.get('results', [])
-        if results:
-            res = results[0]
-            name = res.get('title') or res.get('name')
-            year_out = (res.get('release_date','') or res.get('first_air_date',''))[:4]
-            return name, year_out
-    except Exception as e:
-        print(f"⚠️  Ricerca TMDB fallita ({e}) — uso il nome file come fallback")
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                data = json.load(r)
+            results = data.get('results', [])
+            if results:
+                res = results[0]
+                name = res.get('title') or res.get('name')
+                year_out = (res.get('release_date','') or res.get('first_air_date',''))[:4]
+                return name, year_out
+            return None, None
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(2)
+                continue
+            print(f"⚠️  Ricerca TMDB fallita ({e}) — uso il nome file come fallback")
     return None, None
 
 def get_files(content):
@@ -149,8 +177,7 @@ for t in torrents:
 
     first       = os.path.basename(src_files[0])
     title_clean = clean_title(first, is_serie)
-    year_m      = re.search(r'(19|20)\d{2}', first)
-    year        = year_m.group() if year_m and not is_serie else None
+    year        = extract_year(first) if not is_serie else None
     media       = 'tv' if is_serie else 'movie'
 
     tmdb_title, tmdb_year = search_tmdb(title_clean, year, media)
