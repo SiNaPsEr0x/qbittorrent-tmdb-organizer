@@ -83,6 +83,8 @@ qBittorrent has no native "on torrent deleted" event, so when you delete a torre
 
 `tmdb_prepare.py` solves this intelligently: **every time you add a new torrent**, before doing anything else, it scans the `MOVIES/` and `SERIES/` folders and automatically removes all empty folders left by previous deletions.
 
+Cleanup runs for every added torrent (even outside `MOVIES/`/`SERIES/`). As a safety guard, only folders that have been empty for at least 5 minutes are removed (`CLEANUP_MIN_AGE`, configurable): folders just created by other starting downloads are left alone.
+
 No extra service, no cron job, no additional configuration. The simple act of adding a new torrent keeps the library clean. 🧹
 
 ---

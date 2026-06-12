@@ -83,6 +83,8 @@ qBittorrent non ha un evento nativo "on torrent deleted", quindi quando cancelli
 
 `tmdb_prepare.py` risolve questo problema in modo intelligente: **ogni volta che aggiungi un nuovo torrent**, prima di fare qualsiasi altra cosa, scansiona le cartelle `FILM/` e `SERIE/` e rimuove automaticamente tutte le cartelle vuote lasciate da cancellazioni precedenti.
 
+La pulizia avviene per qualsiasi torrent aggiunto (anche fuori da `FILM/`/`SERIE/`). Per sicurezza vengono rimosse solo le cartelle vuote da almeno 5 minuti (`CLEANUP_MIN_AGE`, configurabile): quelle appena create da altri download in avvio non vengono toccate.
+
 Nessun servizio extra, nessun cron job, nessuna configurazione aggiuntiva. Il semplice atto di aggiungere un nuovo torrent mantiene la libreria pulita. 🧹
 
 ---
