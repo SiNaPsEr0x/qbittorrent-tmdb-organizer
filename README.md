@@ -58,13 +58,13 @@ Runs **after** the download. Moves already-downloaded files into the correct fol
 ### Resulting structure
 
 ```
-<MOVIES_DIR>/
+<FILM_DIR>/
 ├── Movie Title (Year)/
 │   └── Movie.Title.Year.quality.mkv
 └── Another Movie (Year)/
     └── Another.Movie.Year.quality.mkv
 
-<SERIES_DIR>/
+<SERIE_DIR>/
 ├── Series Name/
 │   ├── Series.Name.S01E01.mkv
 │   └── Series.Name.S01E02.mkv
@@ -89,10 +89,9 @@ No extra service, no cron job, no additional configuration. The simple act of ad
 
 ## 📋 Requirements
 
-- Python 3.8+
+- Python 3.8+ — **no external packages**, standard library only
 - qBittorrent with Web UI enabled
 - Free TMDB API Key → [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api)
-- Packages: `python3-requests`, `python3-urllib3`, `python3-chardet` (auto-installed if missing)
 
 ---
 
@@ -103,8 +102,8 @@ Open **both scripts** and edit the **CONFIGURATION** section:
 ```python
 QB_URL     = "http://localhost:8080"           # qBittorrent Web UI URL and port
 TMDB_TOKEN = "YOUR_TMDB_READ_ACCESS_TOKEN"     # See below
-MOVIES_DIR = "/path/to/your/MOVIES/folder"     # Folder where you save movies
-SERIES_DIR = "/path/to/your/SERIES/folder"     # Folder where you save TV shows
+FILM_DIR   = "/path/to/your/MOVIES/folder"     # Folder where you save movies
+SERIE_DIR  = "/path/to/your/SERIES/folder"     # Folder where you save TV shows
 ```
 
 ### TMDB Token
@@ -116,6 +115,15 @@ SERIES_DIR = "/path/to/your/SERIES/folder"     # Folder where you save TV shows
 
 ```bash
 export TMDB_TOKEN="eyJ..."
+```
+
+### Web UI credentials (optional)
+
+If your qBittorrent Web UI requires login (i.e. you haven't enabled "Bypass authentication for clients on localhost"), export the credentials as environment variables:
+
+```bash
+export QB_USER="username"
+export QB_PASS="password"
 ```
 
 ---
@@ -158,7 +166,7 @@ python3 tmdb_organizer.py --ok --hash XXXXXXXXXX
 
 ## 🛡️ Safety
 
-Both scripts automatically ignore all torrents that are **not** located in `MOVIES_DIR` or `SERIES_DIR`. Software downloads, games, music or any other content are never touched.
+Both scripts automatically ignore all torrents that are **not** located in `FILM_DIR` or `SERIE_DIR`. Software downloads, games, music or any other content are never touched.
 
 ---
 
@@ -168,9 +176,9 @@ If TMDB can't find the title, the scripts use the **cleaned filename** as the fo
 
 ---
 
-## 📦 Automatic dependencies
+## 📦 Zero dependencies
 
-On startup, both scripts check that all required packages are installed. If any are missing, they are automatically installed via `apt`. If the version of `requests` is incompatible with `chardet`, it automatically updates via `pip`.
+The scripts use only the Python standard library: nothing to install, no `pip`, no `apt`. Just copy them and they work on any system with Python 3.8+.
 
 ---
 
