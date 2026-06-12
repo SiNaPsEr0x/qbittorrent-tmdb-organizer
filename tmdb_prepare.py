@@ -33,7 +33,7 @@ QB_PASS    = os.environ.get("QB_PASS", "")
 TMDB_TOKEN = os.environ.get("TMDB_TOKEN", "IL_TUO_TMDB_READ_ACCESS_TOKEN")
 FILM_DIR   = "/percorso/alla/tua/cartella/FILM"
 SERIE_DIR  = "/percorso/alla/tua/cartella/SERIE"
-CLEANUP_MIN_AGE = 3600   # secondi: elimina solo cartelle vuote piu' vecchie di 1h
+CLEANUP_MIN_AGE = 300    # secondi: elimina solo cartelle vuote piu' vecchie di 5 min
 START_AFTER_SET = True   # avvia il torrent dopo setLocation (usa con add-paused)
 # ============================================================================
 
@@ -201,16 +201,19 @@ save_path = torrent['save_path'].rstrip('/')
 is_film  = is_within(save_path, FILM_DIR)
 is_serie = is_within(save_path, SERIE_DIR)
 
+# Metti in pausa SUBITO i torrent da gestire: evita che qBittorrent scriva nel
+# path sbagliato mentre interroghiamo TMDB (elimina la race su setLocation)
+if is_film or is_serie:
+    qb_pause(HASH)
+
+# Pulizia cartelle vuote a OGNI torrent aggiunto, anche fuori da FILM/SERIE;
+# la guardia sull'eta' (CLEANUP_MIN_AGE) evita di toccare cartelle appena
+# create da altri torrent in avvio
+cleanup_empty_folders()
+
 if not is_film and not is_serie:
     print(f"SKIP Ignorato (non in FILM/SERIE): {name}")
     sys.exit(0)
-
-# Metti in pausa SUBITO: evita che qBittorrent scriva nel path sbagliato
-# mentre interroghiamo TMDB (elimina la race su setLocation)
-qb_pause(HASH)
-
-# Cleanup DOPO aver identificato il torrent, con guardia sull'eta' delle cartelle
-cleanup_empty_folders()
 
 title_clean = clean_title(name, is_serie)
 year        = extract_year(name) if is_film else None
