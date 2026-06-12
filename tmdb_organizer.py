@@ -14,8 +14,10 @@
 # CONFIGURAZIONE:
 #   1. Imposta QB_URL con l'indirizzo della tua Web UI qBittorrent
 #      Se la Web UI richiede credenziali: export QB_USER="utente" QB_PASS="password"
-#   2. Imposta TMDB_TOKEN con il tuo Read Access Token da themoviedb.org/settings/api
-#      oppure esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
+#   2. Imposta TMDB_TOKEN con il tuo "API Read Access Token" da
+#      themoviedb.org/settings/api: e' quello LUNGO che inizia con "eyJ".
+#      NON usare la "API Key" corta (32 caratteri): non funziona.
+#      In alternativa esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
 #   3. Imposta FILM_DIR e SERIE_DIR con i percorsi delle tue cartelle
 #
 # STRUTTURA RISULTANTE:
@@ -50,6 +52,12 @@ if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
     print("   Poi impostalo nel file o con: export TMDB_TOKEN=\"eyJ...\"")
     sys.exit(1)
 
+if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
+    print("❌ TMDB_TOKEN e' una 'API Key' (v3): TMDB risponderebbe 401 a ogni ricerca.")
+    print("   Serve l'API Read Access Token (quello LUNGO che inizia con 'eyJ').")
+    print("   Lo trovi su: https://www.themoviedb.org/settings/api → 'API Read Access Token'")
+    sys.exit(1)
+
 def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', ' -', name).strip()
 
@@ -76,6 +84,8 @@ def clean_title(filename, is_serie):
     # tag di qualita': utili anche per le serie senza SxxExx nel nome
     name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
                   '', name, flags=re.IGNORECASE)
+    # residui a fine nome dopo il troncamento (es. "Nuremberg.(" da "Nuremberg.(2025)")
+    name = re.sub(r'[\s.\-_\(\[]+$', '', name)
     # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG); solo su
     # nomi scene-style con punti, per non troncare titoli come "Spider-Man"
     if '.' in name:
