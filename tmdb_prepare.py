@@ -167,9 +167,18 @@ def qb_login():
     except (urllib.error.URLError, OSError) as e:
         print(f"ERRORE qBittorrent non raggiungibile su {QB_URL}: {e}")
         sys.exit(1)
-    if body.strip() != "Ok.":
-        print("ERRORE Login Web UI fallito: controlla QB_USER/QB_PASS o le impostazioni della Web UI")
-        sys.exit(1)
+    if body.strip() == "Ok.":
+        return  # login riuscito con credenziali
+    # Con "Bypass authentication for clients on localhost" attivo, qBittorrent
+    # risponde "Fails." anche a credenziali vuote, ma le API funzionano comunque.
+    # Verifica con una chiamata reale: se risponde, il bypass e' attivo.
+    try:
+        qb_get_json("/api/v2/torrents/info")
+        return  # bypass localhost/whitelist attivo, ok
+    except Exception:
+        pass
+    print("ERRORE Login Web UI fallito: controlla QB_USER/QB_PASS o le impostazioni della Web UI")
+    sys.exit(1)
 
 def qb_pause(h):
     # qBittorrent 5.x usa /stop, 4.x usa /pause: prova entrambi
