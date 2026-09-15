@@ -217,3 +217,13 @@ Questi script sono un **semplice organizzatore di file**: non scaricano nulla, n
 
 **Chiunque utilizzi questo software è tenuto a farlo esclusivamente con contenuti per cui dispone dei diritti necessari, nel rispetto delle leggi sul diritto d'autore vigenti nel proprio paese.  
 L'autore declina ogni responsabilità per utilizzi non conformi alla normativa applicabile.**
+
+---
+
+## ⚖️ Licenza
+
+Il progetto è distribuito con [licenza MIT](LICENSE): puoi usare, copiare,
+modificare, unire, pubblicare, distribuire, concedere in sublicenza e vendere
+copie del software. Ogni copia o parte sostanziale deve mantenere l'avviso di
+copyright originale e la licenza, preservando così l'attribuzione a
+**SiNaPsEr0x**.

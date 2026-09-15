@@ -9,3 +9,7 @@
   secrets and personal configuration. Confirm the local script is ignored and
   absent from the index.
 - Public examples must use placeholders or clearly fictional values.
+- Keep the canonical MIT license text intact, including the copyright and
+  attribution notice for SiNaPsEr0x.
+- Keep the license sections in `README.md` and `README.it.md` aligned whenever
+  licensing information changes.

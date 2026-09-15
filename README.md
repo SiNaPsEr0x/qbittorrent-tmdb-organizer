@@ -217,3 +217,12 @@ These scripts are a **simple file organizer**: they don't download anything, don
 
 **Anyone using this software must do so exclusively with content they have the rights to, in compliance with copyright laws in force in their country.  
 The author disclaims all liability for uses that do not comply with applicable law.**
+
+---
+
+## ⚖️ License
+
+Released under the [MIT License](LICENSE): you may use, copy, modify, merge,
+publish, distribute, sublicense, and sell copies of the software. Every copy or
+substantial portion must retain the original copyright notice and the license,
+thereby preserving attribution to **SiNaPsEr0x**.
