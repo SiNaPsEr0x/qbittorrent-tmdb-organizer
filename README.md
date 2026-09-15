@@ -8,6 +8,9 @@
 
 Two Python scripts that hook into qBittorrent and automatically organize your downloads into **MOVIES** and **TV SHOWS** folders, using the [TMDB](https://www.themoviedb.org/) API to fetch official titles.
 
+You can use a single default inbox: `tmdb_prepare.py` automatically detects the
+media type and selects `MOVIES/` or `SERIES/`.
+
 ---
 
 ## 📦 Available scripts
@@ -21,6 +24,7 @@ Runs **before** the download starts. Sets the correct folder in qBittorrent imme
 - No extra recheck — only qBittorrent's native one on completion
 - Faster and more efficient, especially for large files (4K, UHD)
 - Automatic cleanup of empty folders on every new torrent added
+- Automatic movie/series classification from the inbox
 
 ### `tmdb_organizer.py` — Migration / manual use
 
@@ -38,15 +42,15 @@ Runs **after** the download. Moves already-downloaded files into the correct fol
 ## ✨ How `tmdb_prepare.py` works
 
 ```
-1. Add torrent in qBittorrent selecting MOVIES/ or SERIES/
+1. Add the torrent to the default inbox
          ↓
 2. qBittorrent fires "Run on torrent added" → launches tmdb_prepare.py
          ↓
 3. Automatic cleanup of empty folders left by deleted torrents
          ↓
-4. Script reads the torrent name and searches TMDB
+4. Script detects episode/season markers or uses TMDB multi-search
          ↓
-5. Creates the final folder (e.g. /MOVIES/Avatar - Fire and Ash (2025)/)
+5. Selects MOVIES or SERIES and creates the final folder
          ↓
 6. Sets the path in qBittorrent before the download starts
          ↓
@@ -99,11 +103,13 @@ No extra service, no cron job, no additional configuration. The simple act of ad
 
 ## ⚙️ Configuration
 
-Open **both scripts** and edit the **CONFIGURATION** section:
+Open the scripts and edit the **CONFIGURATION** section. `INBOX_DIR` is used by
+`tmdb_prepare.py` for torrents that need automatic classification:
 
 ```python
 QB_URL     = "http://localhost:8080"           # qBittorrent Web UI URL and port
 TMDB_TOKEN = "YOUR_TMDB_READ_ACCESS_TOKEN"     # See below
+INBOX_DIR  = "/path/to/your/media"              # Default incoming folder
 FILM_DIR   = "/path/to/your/MOVIES/folder"     # Folder where you save movies
 SERIE_DIR  = "/path/to/your/SERIES/folder"     # Folder where you save TV shows
 ```
@@ -168,13 +174,21 @@ python3 tmdb_organizer.py --ok --hash XXXXXXXXXX
 
 ## 🛡️ Safety
 
-Both scripts automatically ignore all torrents that are **not** located in `FILM_DIR` or `SERIE_DIR`. Software downloads, games, music or any other content are never touched.
+`tmdb_prepare.py` only handles torrents whose save path is exactly `INBOX_DIR`,
+or is already under `FILM_DIR` or `SERIE_DIR`. Other paths are ignored. If an
+inbox torrent cannot be classified, it stays in its original folder and remains
+paused.
+
+`tmdb_organizer.py` continues to handle only content already stored under
+`FILM_DIR` or `SERIE_DIR`.
 
 ---
 
 ## 🔄 Fallback
 
-If TMDB can't find the title, the scripts use the **cleaned filename** as the folder name instead of crashing.
+For a manually selected destination, or a series identified by a marker such as
+`S01E02`, a missing TMDB result falls back to the **cleaned filename**. An
+unrecognized inbox item remains paused.
 
 ---
 
@@ -188,6 +202,7 @@ The scripts use only the Python standard library: nothing to install, no `pip`, 
 
 - Raspberry Pi OS (Debian Bookworm)
 - qBittorrent-nox 4.x with Web UI
+- qBittorrent WebUI API 5.x (`stop`/`start`) and 4.1–4.6 (`pause`/`resume`)
 - Python 3.11
 
 ---

@@ -1,2 +1,3 @@
 __pycache__/
 *.pyc
+tmdb_prepare.local.py

@@ -8,6 +8,9 @@
 
 Due script Python che si agganciano a qBittorrent e organizzano automaticamente i tuoi download in cartelle **FILM** e **SERIE TV**, usando l'API di [TMDB](https://www.themoviedb.org/) per ottenere i titoli ufficiali in italiano.
 
+Puoi usare una sola cartella di ingresso predefinita: `tmdb_prepare.py` riconosce
+automaticamente il tipo di contenuto e sceglie `FILM/` oppure `SERIE/`.
+
 ---
 
 ## 📦 Script disponibili
@@ -21,6 +24,7 @@ Viene eseguito **prima** che il download inizi. Imposta subito la cartella corre
 - Nessun recheck aggiuntivo — solo quello nativo di qBittorrent al completamento
 - Più veloce ed efficiente, soprattutto per file grandi (4K, UHD)
 - Pulizia automatica delle cartelle vuote ad ogni nuovo torrent aggiunto
+- Classificazione automatica film/serie dalla cartella di ingresso
 
 ### `tmdb_organizer.py` — Migrazione/uso manuale
 
@@ -38,15 +42,15 @@ Viene eseguito **dopo** il download. Sposta i file già scaricati nelle cartelle
 ## ✨ Come funziona `tmdb_prepare.py`
 
 ```
-1. Aggiungi il torrent in qBittorrent selezionando FILM/ o SERIE/
+1. Aggiungi il torrent nella cartella di ingresso predefinita
          ↓
 2. qBittorrent scatta "Run on torrent added" → lancia tmdb_prepare.py
          ↓
 3. Pulizia automatica delle cartelle vuote lasciate da torrent cancellati
          ↓
-4. Lo script legge il nome del torrent e cerca su TMDB
+4. Lo script riconosce gli indicatori di episodio/stagione o usa la ricerca combinata TMDB
          ↓
-5. Crea la cartella finale (es. /FILM/Avatar - Fuoco e Cenere (2025)/)
+5. Sceglie FILM o SERIE e crea la cartella finale
          ↓
 6. Imposta il percorso in qBittorrent prima che inizi il download
          ↓
@@ -99,11 +103,13 @@ Nessun servizio extra, nessun cron job, nessuna configurazione aggiuntiva. Il se
 
 ## ⚙️ Configurazione
 
-Apri **entrambi gli script** e modifica la sezione **CONFIGURAZIONE**:
+Apri gli script e modifica la sezione **CONFIGURAZIONE**. `INBOX_DIR` viene
+usata da `tmdb_prepare.py` per i torrent da classificare automaticamente:
 
 ```python
 QB_URL     = "http://localhost:8080"          # URL e porta della Web UI qBittorrent
 TMDB_TOKEN = "IL_TUO_TMDB_READ_ACCESS_TOKEN"  # Vedi sotto
+INBOX_DIR  = "/percorso/alla/tua/cartella"        # Cartella di ingresso predefinita
 FILM_DIR   = "/percorso/alla/tua/cartella/FILM"   # Cartella dove salvi i film
 SERIE_DIR  = "/percorso/alla/tua/cartella/SERIE"  # Cartella dove salvi le serie
 ```
@@ -168,13 +174,21 @@ python3 tmdb_organizer.py --ok --hash XXXXXXXXXX
 
 ## 🛡️ Sicurezza
 
-Entrambi gli script ignorano automaticamente tutti i torrent che **non** si trovano in `FILM_DIR` o `SERIE_DIR`. Download di software, giochi, musica o qualsiasi altro contenuto non vengono mai toccati.
+`tmdb_prepare.py` gestisce solo i torrent il cui percorso è esattamente
+`INBOX_DIR` oppure si trova già sotto `FILM_DIR` o `SERIE_DIR`. Gli altri
+percorsi vengono ignorati. Se un torrent nella cartella di ingresso non può
+essere classificato, resta nella cartella originale e rimane in pausa.
+
+`tmdb_organizer.py` continua a gestire soltanto contenuti già presenti sotto
+`FILM_DIR` o `SERIE_DIR`.
 
 ---
 
 ## 🔄 Fallback
 
-Se TMDB non trova il titolo, gli script usano il **nome pulito del file** come nome cartella invece di crashare.
+Per un percorso scelto manualmente, o per una serie riconosciuta da un indicatore
+come `S01E02`, se TMDB non trova il titolo viene usato il **nome pulito del
+file**. Un contenuto non riconosciuto nella cartella di ingresso resta in pausa.
 
 ---
 
@@ -188,6 +202,7 @@ Gli script usano esclusivamente la libreria standard di Python: nessun pacchetto
 
 - Raspberry Pi OS (Debian Bookworm)
 - qBittorrent-nox 4.x con Web UI
+- API WebUI qBittorrent 5.x (`stop`/`start`) e 4.1–4.6 (`pause`/`resume`)
 - Python 3.11
 
 ---

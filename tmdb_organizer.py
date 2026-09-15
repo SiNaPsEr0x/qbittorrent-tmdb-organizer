@@ -29,7 +29,7 @@
 import re, os, shutil, urllib.parse, urllib.request, urllib.error, http.cookiejar, json, sys, time
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────────────────────
-QB_URL     = "http://localhost:8080"          # URL Web UI qBittorrent
+QB_URL     = "http://localhost:8080".rstrip("/") # URL Web UI qBittorrent
 QB_USER    = os.environ.get("QB_USER", "")    # vuoto se la Web UI non richiede login
 QB_PASS    = os.environ.get("QB_PASS", "")
 TMDB_TOKEN = os.environ.get("TMDB_TOKEN", "IL_TUO_TMDB_READ_ACCESS_TOKEN")
@@ -138,15 +138,26 @@ def get_files(content):
 _opener = urllib.request.build_opener(
     urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
+def build_qb_request(path, data=None):
+    headers = {'Referer': QB_URL}
+    encoded = None
+    if data is not None:
+        encoded = urllib.parse.urlencode(data).encode()
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    return urllib.request.Request(QB_URL + path, data=encoded, headers=headers)
+
 def qb_post(path, data):
-    req = urllib.request.Request(QB_URL + path,
-                                 data=urllib.parse.urlencode(data).encode())
+    req = build_qb_request(path, data)
     with _opener.open(req, timeout=10) as r:
         return r.read().decode()
 
 def qb_get_json(path):
-    with _opener.open(QB_URL + path, timeout=10) as r:
+    with _opener.open(build_qb_request(path), timeout=10) as r:
         return json.load(r)
+
+def qb_get_text(path):
+    with _opener.open(build_qb_request(path), timeout=10) as r:
+        return r.read().decode()
 
 def qb_login():
     try:
@@ -154,12 +165,20 @@ def qb_login():
     except (urllib.error.URLError, OSError) as e:
         print(f"❌ qBittorrent non raggiungibile su {QB_URL}: {e}")
         sys.exit(1)
-    if body.strip() != "Ok.":
+    if body.strip() == "Ok.":
+        return
+    try:
+        qb_get_json("/api/v2/torrents/info?limit=1")
+        return  # bypass localhost/whitelist attivo
+    except Exception:
         print("❌ Login Web UI fallito: controlla QB_USER/QB_PASS o le impostazioni della Web UI")
         sys.exit(1)
 
 qb_login()
-torrents = qb_get_json("/api/v2/torrents/info")
+torrents_path = "/api/v2/torrents/info"
+if HASH_FILTER:
+    torrents_path += '?' + urllib.parse.urlencode({'hashes': HASH_FILTER})
+torrents = qb_get_json(torrents_path)
 
 if HASH_FILTER:
     torrents = [t for t in torrents if t.get('hash','').lower() == HASH_FILTER]

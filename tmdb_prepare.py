@@ -2,130 +2,243 @@
 #
 # SCRIPT DI PREPARAZIONE - Eseguito PRIMA del download
 #
-# Imposta il percorso corretto basato su TMDB prima che qBittorrent
-# inizi a scaricare, evitando spostamenti e recheck aggiuntivi.
-# Pulisce automaticamente le cartelle vuote lasciate da torrent cancellati.
+# Imposta il percorso corretto basato su TMDB prima che qBittorrent inizi a
+# scaricare. Se il torrent entra in INBOX_DIR, riconosce automaticamente film
+# e serie; FILM_DIR e SERIE_DIR restano selezionabili manualmente.
 #
 # QBITTORRENT - "Run external program on torrent added":
 #   python3 /percorso/tmdb_prepare.py --hash %I
 #
-# CONSIGLIATO: abilita "Non avviare automaticamente i download" in qBittorrent
-# (Opzioni -> Download -> "Do not start automatically"). Lo script avviera' il
-# torrent da solo DOPO aver impostato il percorso, eliminando ogni race.
-#
-# CONFIGURAZIONE:
-#   1. Imposta QB_URL con l'indirizzo della tua Web UI qBittorrent
-#      Se la Web UI richiede credenziali: export QB_USER="utente" QB_PASS="password"
-#   2. Imposta TMDB_TOKEN con il tuo "API Read Access Token" da
-#      themoviedb.org/settings/api: e' quello LUNGO che inizia con "eyJ".
-#      NON usare la "API Key" corta (32 caratteri): non funziona.
-#      In alternativa esportalo come variabile d'ambiente: export TMDB_TOKEN="eyJ..."
-#   3. Imposta FILM_DIR e SERIE_DIR con i percorsi delle tue cartelle
+# CONSIGLIATO: abilita "Non avviare automaticamente i download" in qBittorrent.
+# Lo script avvia il torrent solo dopo aver impostato la destinazione finale.
 #
 # Richiede solo Python 3.8+ - nessun pacchetto esterno.
 #
-import re, os, urllib.parse, urllib.request, urllib.error, http.cookiejar, json, sys, time
+import http.cookiejar
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+
 
 # == CONFIGURAZIONE ==========================================================
-QB_URL     = "http://localhost:8080"          # URL Web UI qBittorrent
-QB_USER    = os.environ.get("QB_USER", "")    # vuoto se la Web UI non richiede login
-QB_PASS    = os.environ.get("QB_PASS", "")
+QB_URL = os.environ.get("QB_URL", "http://localhost:8080").rstrip("/")
+QB_USER = os.environ.get("QB_USER", "")
+QB_PASS = os.environ.get("QB_PASS", "")
 TMDB_TOKEN = os.environ.get("TMDB_TOKEN", "IL_TUO_TMDB_READ_ACCESS_TOKEN")
-FILM_DIR   = "/percorso/alla/tua/cartella/FILM"
-SERIE_DIR  = "/percorso/alla/tua/cartella/SERIE"
-CLEANUP_MIN_AGE = 300    # secondi: elimina solo cartelle vuote piu' vecchie di 5 min
-START_AFTER_SET = True   # avvia il torrent dopo setLocation (usa con add-paused)
+INBOX_DIR = os.environ.get("INBOX_DIR", "/percorso/alla/tua/cartella")
+FILM_DIR = os.environ.get("FILM_DIR", "/percorso/alla/tua/cartella/FILM")
+SERIE_DIR = os.environ.get("SERIE_DIR", "/percorso/alla/tua/cartella/SERIE")
+CLEANUP_MIN_AGE = 300
+START_AFTER_SET = True
 # ============================================================================
 
-if "--hash" not in sys.argv:
-    print("ERRORE Uso: python3 tmdb_prepare.py --hash <hash>")
-    sys.exit(1)
 
-if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
-    print("ERRORE TMDB_TOKEN non configurato.")
-    print("   Ottieni il token su: https://www.themoviedb.org/settings/api")
-    sys.exit(1)
+_SERIES_MARKER_RE = re.compile(
+    r"""(?ix)
+    (?<![a-z0-9])(?:
+        s\d{1,2}(?:e\d{1,3}(?:e\d{1,3})*)?
+        | \d{1,2}x\d{1,3}
+        | (?:season|stagione)[._ -]*\d{1,2}
+        | complete[._ -]+series
+        | serie[._ -]+completa
+    )(?![a-z0-9])
+    """
+)
 
-if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
-    print("ERRORE TMDB_TOKEN e' una 'API Key' (v3): TMDB risponderebbe 401 a ogni ricerca.")
-    print("   Serve l'API Read Access Token (quello LUNGO che inizia con 'eyJ').")
-    print("   Lo trovi su: https://www.themoviedb.org/settings/api -> 'API Read Access Token'")
-    sys.exit(1)
 
-idx = sys.argv.index("--hash")
-if idx + 1 >= len(sys.argv):
-    print("ERRORE Uso: python3 tmdb_prepare.py --hash <hash>")
-    sys.exit(1)
-HASH = sys.argv[idx + 1].lower()
+@dataclass(frozen=True)
+class Classification:
+    media: str
+    folder_name: str
+    source: str
+
 
 def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', ' -', name).strip()
 
+
 def strip_release_group(name):
-    # [Group] o (Group) all'inizio del nome; deve contenere almeno una lettera
-    # per non mangiare titoli come "(500).Days.of.Summer"
-    name = re.sub(r'^\s*[\[\(](?=[^\]\)]*[A-Za-z])[^\]\)]{1,40}[\]\)]\s*[-_. ]*', '', name)
-    # blocchi tra parentesi quadre ovunque nel nome (es. [ITA], [x265-Grp])
-    name = re.sub(r'\[[^\]]{1,40}\]', ' ', name)
-    return name
+    name = re.sub(
+        r'^\s*[\[\(](?=[^\]\)]*[A-Za-z])[^\]\)]{1,40}[\]\)]\s*[-_. ]*',
+        '', name)
+    return re.sub(r'\[[^\]]{1,40}\]', ' ', name)
+
+
+def series_marker_match(name):
+    return _SERIES_MARKER_RE.search(name)
+
+
+def has_series_marker(name):
+    return series_marker_match(name) is not None
+
 
 def clean_title(filename, is_serie):
     name = re.sub(r'\.(mkv|avi|mp4)$', '', filename, flags=re.IGNORECASE)
     name = strip_release_group(name)
     if is_serie:
-        m = re.search(r'[Ss]\d+[Ee]\d+', name)
-        if m: name = name[:m.start()]
+        marker = series_marker_match(name)
+        if marker:
+            name = name[:marker.start()]
     else:
-        # Usa l'ULTIMO anno trovato: gestisce titoli che contengono un anno
-        # (es. "Blade.Runner.2049.2017..." -> tronca a "Blade Runner 2049").
-        # Lookaround: i delimitatori non vengono consumati, cosi' anni adiacenti
-        # (".2049.2017.") vengono trovati entrambi. Il '-' copre "Titolo.2024-GRP".
-        years = list(re.finditer(r'(?<=[\. \(])(19|20)\d{2}(?=[\. \)\-]|$)', name))
+        years = list(re.finditer(
+            r'(?<=[\. \(])(19|20)\d{2}(?=[\. \)\-]|$)', name))
         if years:
             name = name[:years[-1].start()]
-    # tag di qualita': utili anche per le serie senza SxxExx nel nome
-    name = re.sub(r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
-                  '', name, flags=re.IGNORECASE)
-    # residui a fine nome dopo il troncamento (es. "Nuremberg.(" da "Nuremberg.(2025)")
+    name = re.sub(
+        r'[\. ](2160p|1080p|720p|BluRay|WEB-DL|WEBRip|HDTV|UHDrip|x26[45]|HEVC|REMUX).*',
+        '', name, flags=re.IGNORECASE)
     name = re.sub(r'[\s.\-_\(\[]+$', '', name)
-    # suffisso "-GROUP" tipico delle release (es. Titolo.2024-RARBG); solo su
-    # nomi scene-style con punti, per non troncare titoli come "Spider-Man"
     if '.' in name:
         name = re.sub(r'-[A-Za-z0-9]{2,20}$', '', name)
     return re.sub(r'\s{2,}', ' ', name.replace('.', ' ')).strip(' -_')
 
+
 def extract_year(name):
-    # Ultimo anno nel nome = anno di uscita (il primo puo' far parte del titolo)
     years = re.findall(r'(?:19|20)\d{2}', name)
     return years[-1] if years else None
+
+
+def same_path(path, base):
+    return os.path.normpath(path) == os.path.normpath(base)
+
 
 def is_within(path, base):
     path, base = os.path.normpath(path), os.path.normpath(base)
     return path == base or path.startswith(base + os.sep)
 
+
+def route_for_path(save_path):
+    if is_within(save_path, FILM_DIR):
+        return 'movie'
+    if is_within(save_path, SERIE_DIR):
+        return 'tv'
+    if same_path(save_path, INBOX_DIR):
+        return 'auto'
+    return 'skip'
+
+
+def _tmdb_get(path, params):
+    url = "https://api.themoviedb.org/3" + path
+    url += '?' + urllib.parse.urlencode(params)
+    req = urllib.request.Request(
+        url, headers={'Authorization': f'Bearer {TMDB_TOKEN}'})
+    with urllib.request.urlopen(req, timeout=8) as response:
+        return json.load(response)
+
+
 def search_tmdb(title, year=None, media='movie', retries=2):
-    base = f"https://api.themoviedb.org/3/search/{media}"
     params = {'query': title, 'language': 'it-IT'}
-    if year: params['year' if media == 'movie' else 'first_air_date_year'] = year
-    url = base + '?' + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {TMDB_TOKEN}'})
+    if year:
+        params['year' if media == 'movie' else 'first_air_date_year'] = year
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=8) as r:
-                data = json.load(r)
-            results = data.get('results', [])
-            if results:
-                res = results[0]
-                name = res.get('title') or res.get('name')
-                year_out = (res.get('release_date','') or res.get('first_air_date',''))[:4]
-                return name, year_out
-            return None, None
-        except Exception as e:
+            results = _tmdb_get(f"/search/{media}", params).get('results', [])
+            if not results:
+                return None, None
+            result = results[0]
+            title_out = result.get('title') or result.get('name')
+            year_out = (
+                result.get('release_date', '')
+                or result.get('first_air_date', '')
+            )[:4]
+            return title_out, year_out
+        except Exception as error:
             if attempt < retries - 1:
                 time.sleep(2)
                 continue
-            print(f"ATTENZIONE Ricerca TMDB fallita ({e}) - uso il nome torrent come fallback")
+            print(f"ATTENZIONE Ricerca TMDB fallita ({error})")
     return None, None
+
+
+def select_tmdb_multi_result(results, year=None):
+    candidates = [
+        result for result in results
+        if result.get('media_type') in ('movie', 'tv')
+        and (result.get('title') or result.get('name'))
+    ]
+    if year:
+        matching_year = []
+        for result in candidates:
+            result_year = (
+                result.get('release_date', '')
+                or result.get('first_air_date', '')
+            )[:4]
+            if result_year == year:
+                matching_year.append(result)
+        if matching_year:
+            candidates = matching_year
+    return candidates[0] if candidates else None
+
+
+def search_tmdb_multi(title, year=None, retries=2):
+    params = {
+        'query': title,
+        'language': 'it-IT',
+        'include_adult': 'false',
+    }
+    for attempt in range(retries):
+        try:
+            results = _tmdb_get('/search/multi', params).get('results', [])
+            result = select_tmdb_multi_result(results, year)
+            if not result:
+                return None, None, None
+            media = result['media_type']
+            title_out = result.get('title') or result.get('name')
+            year_out = (
+                result.get('release_date', '')
+                or result.get('first_air_date', '')
+            )[:4]
+            return media, title_out, year_out
+        except Exception as error:
+            if attempt < retries - 1:
+                time.sleep(2)
+                continue
+            print(f"ATTENZIONE Ricerca TMDB combinata fallita ({error})")
+    return None, None, None
+
+
+def _folder_name(media, title, year):
+    folder = safe_name(title)
+    if media == 'movie' and year:
+        folder = f"{folder} ({year})"
+    return folder
+
+
+def classify_torrent(name, route, specific_search=None, multi_search=None):
+    specific_search = specific_search or search_tmdb
+    multi_search = multi_search or search_tmdb_multi
+    year = extract_year(name)
+
+    if route == 'auto' and not has_series_marker(name):
+        title_clean = clean_title(name, False)
+        media, tmdb_title, tmdb_year = multi_search(title_clean, year)
+        if not media or not tmdb_title:
+            return None
+        return Classification(
+            media,
+            _folder_name(media, tmdb_title, tmdb_year),
+            'TMDB-AUTO')
+
+    media = 'tv' if route == 'tv' or route == 'auto' else 'movie'
+    title_clean = clean_title(name, media == 'tv')
+    tmdb_title, tmdb_year = specific_search(title_clean, year, media)
+    if tmdb_title:
+        return Classification(
+            media,
+            _folder_name(media, tmdb_title, tmdb_year),
+            'TMDB')
+
+    return Classification(
+        media,
+        _folder_name(media, title_clean, year),
+        'FALLBACK')
+
 
 def cleanup_empty_folders():
     now = time.time()
@@ -140,121 +253,212 @@ def cleanup_empty_folders():
                     os.rmdir(full)
                     print(f"PULIZIA Cartella vuota rimossa: {folder}")
             except OSError:
-                pass  # creata/scritta da un altro processo nel frattempo
+                pass
 
-# == API qBittorrent (urllib con cookie di sessione) =========================
+
+_cookie_jar = http.cookiejar.CookieJar()
 _opener = urllib.request.build_opener(
-    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    urllib.request.HTTPCookieProcessor(_cookie_jar))
 
-def qb_post(path, data, fatal=True):
-    req = urllib.request.Request(QB_URL + path,
-                                 data=urllib.parse.urlencode(data).encode())
-    try:
-        with _opener.open(req, timeout=10) as r:
-            return r.read().decode()
-    except urllib.error.HTTPError:
-        if fatal:
-            raise
-        return None
+
+def build_qb_request(path, data=None):
+    headers = {'Referer': QB_URL}
+    encoded = None
+    if data is not None:
+        encoded = urllib.parse.urlencode(data).encode()
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    return urllib.request.Request(QB_URL + path, data=encoded, headers=headers)
+
+
+def qb_post(path, data):
+    with _opener.open(build_qb_request(path, data), timeout=10) as response:
+        return response.read().decode()
+
+
+def qb_get_text(path):
+    with _opener.open(build_qb_request(path), timeout=10) as response:
+        return response.read().decode()
+
 
 def qb_get_json(path):
-    with _opener.open(QB_URL + path, timeout=10) as r:
-        return json.load(r)
+    with _opener.open(build_qb_request(path), timeout=10) as response:
+        return json.load(response)
+
 
 def qb_login():
+    body = qb_post(
+        "/api/v2/auth/login",
+        {"username": QB_USER, "password": QB_PASS})
+    if body.strip() == "Ok." or any(c.name == 'SID' for c in _cookie_jar):
+        return
     try:
-        body = qb_post("/api/v2/auth/login", {"username": QB_USER, "password": QB_PASS})
-    except (urllib.error.URLError, OSError) as e:
-        print(f"ERRORE qBittorrent non raggiungibile su {QB_URL}: {e}")
-        sys.exit(1)
-    if body.strip() == "Ok.":
-        return  # login riuscito con credenziali
-    # Con "Bypass authentication for clients on localhost" attivo, qBittorrent
-    # risponde "Fails." anche a credenziali vuote, ma le API funzionano comunque.
-    # Verifica con una chiamata reale: se risponde, il bypass e' attivo.
+        qb_get_json("/api/v2/torrents/info?limit=1")
+        return
+    except Exception as error:
+        raise RuntimeError(
+            "Login Web UI fallito: controlla QB_USER/QB_PASS o il bypass localhost"
+        ) from error
+
+
+def qb_versions():
+    return (
+        qb_get_text("/api/v2/app/version").strip(),
+        qb_get_text("/api/v2/app/webapiVersion").strip(),
+    )
+
+
+def qb_major_version(version):
+    match = re.search(r'\d+', version)
+    if not match:
+        raise ValueError(f"Versione qBittorrent non riconosciuta: {version!r}")
+    return int(match.group())
+
+
+def qb_pause(hash_, app_version):
+    method = 'stop' if qb_major_version(app_version) >= 5 else 'pause'
+    qb_post(f"/api/v2/torrents/{method}", {"hashes": hash_})
+
+
+def qb_start(hash_, app_version):
+    method = 'start' if qb_major_version(app_version) >= 5 else 'resume'
+    qb_post(f"/api/v2/torrents/{method}", {"hashes": hash_})
+
+
+def get_torrent_by_hash(hash_, attempts=10):
+    query = urllib.parse.urlencode({'hashes': hash_})
+    path = "/api/v2/torrents/info?" + query
+    for attempt in range(attempts):
+        torrents = qb_get_json(path)
+        torrent = next(
+            (item for item in torrents
+             if item.get('hash', '').lower() == hash_.lower()),
+            None)
+        if torrent:
+            return torrent
+        if attempt < attempts - 1:
+            time.sleep(1)
+    return None
+
+
+def _http_error_detail(error):
+    labels = {
+        400: "percorso di destinazione vuoto",
+        403: "qBittorrent non puo' scrivere nella destinazione",
+        409: "qBittorrent non riesce a creare o usare la destinazione",
+    }
     try:
-        qb_get_json("/api/v2/torrents/info")
-        return  # bypass localhost/whitelist attivo, ok
+        body = error.read().decode(errors='replace').strip()
     except Exception:
-        pass
-    print("ERRORE Login Web UI fallito: controlla QB_USER/QB_PASS o le impostazioni della Web UI")
-    sys.exit(1)
+        body = ''
+    detail = labels.get(error.code, str(error.reason))
+    return f"HTTP {error.code}: {detail}" + (f" ({body})" if body else '')
 
-def qb_pause(h):
-    # qBittorrent 5.x usa /stop, 4.x usa /pause: prova entrambi
-    if qb_post("/api/v2/torrents/stop", {"hashes": h}, fatal=False) is None:
-        qb_post("/api/v2/torrents/pause", {"hashes": h}, fatal=False)
 
-def qb_start(h):
-    if qb_post("/api/v2/torrents/start", {"hashes": h}, fatal=False) is None:
-        qb_post("/api/v2/torrents/resume", {"hashes": h}, fatal=False)
+def relocate_torrent(hash_, dst_dir, app_version, start_after_set=True):
+    try:
+        os.makedirs(dst_dir, exist_ok=True)
+        if not os.path.isdir(dst_dir) or not os.access(dst_dir, os.W_OK):
+            raise OSError("la destinazione non e' una cartella scrivibile")
+    except OSError as error:
+        print(f"ERRORE Creazione destinazione fallita: {error}")
+        return False
 
-qb_login()
+    try:
+        qb_post(
+            "/api/v2/torrents/setLocation",
+            {"hashes": hash_, "location": dst_dir})
+    except urllib.error.HTTPError as error:
+        print(f"ERRORE setLocation fallito: {_http_error_detail(error)}")
+        return False
+    except (urllib.error.URLError, OSError) as error:
+        print(f"ERRORE setLocation fallito: {error}")
+        return False
 
-# Aspetta che qBittorrent registri il torrent appena aggiunto
-torrent = None
-for attempt in range(10):
-    torrents = qb_get_json("/api/v2/torrents/info")
-    torrent  = next((t for t in torrents if t.get('hash','').lower() == HASH), None)
-    if torrent:
-        break
-    time.sleep(1)
+    if start_after_set:
+        try:
+            qb_start(hash_, app_version)
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            print(f"ERRORE Avvio torrent fallito: {error}")
+            return False
+    return True
 
-if not torrent:
-    print(f"ERRORE Torrent {HASH} non trovato")
-    sys.exit(1)
 
-name      = torrent['name']
-save_path = torrent['save_path'].rstrip('/')
+def parse_hash(argv):
+    if "--hash" not in argv:
+        raise ValueError("Uso: python3 tmdb_prepare.py --hash <hash>")
+    index = argv.index("--hash")
+    if index + 1 >= len(argv) or not argv[index + 1].strip():
+        raise ValueError("Uso: python3 tmdb_prepare.py --hash <hash>")
+    return argv[index + 1].lower()
 
-is_film  = is_within(save_path, FILM_DIR)
-is_serie = is_within(save_path, SERIE_DIR)
 
-# Metti in pausa SUBITO i torrent da gestire: evita che qBittorrent scriva nel
-# path sbagliato mentre interroghiamo TMDB (elimina la race su setLocation)
-if is_film or is_serie:
-    qb_pause(HASH)
+def validate_config():
+    if TMDB_TOKEN == "IL_TUO_TMDB_READ_ACCESS_TOKEN":
+        raise ValueError("TMDB_TOKEN non configurato")
+    if re.fullmatch(r'[0-9a-fA-F]{32}', TMDB_TOKEN):
+        raise ValueError(
+            "TMDB_TOKEN e' una API Key v3; serve l'API Read Access Token")
 
-# Pulizia cartelle vuote a OGNI torrent aggiunto, anche fuori da FILM/SERIE;
-# la guardia sull'eta' (CLEANUP_MIN_AGE) evita di toccare cartelle appena
-# create da altri torrent in avvio
-cleanup_empty_folders()
 
-if not is_film and not is_serie:
-    print(f"SKIP Ignorato (non in FILM/SERIE): {name}")
-    sys.exit(0)
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    try:
+        hash_ = parse_hash(argv)
+        validate_config()
+    except ValueError as error:
+        print(f"ERRORE {error}")
+        return 1
 
-title_clean = clean_title(name, is_serie)
-year        = extract_year(name) if is_film else None
-media       = 'tv' if is_serie else 'movie'
+    try:
+        qb_login()
+        app_version, webapi_version = qb_versions()
+        torrent = get_torrent_by_hash(hash_)
+    except (urllib.error.URLError, OSError, RuntimeError, ValueError) as error:
+        print(f"ERRORE qBittorrent non raggiungibile su {QB_URL}: {error}")
+        return 1
 
-tmdb_title, tmdb_year = search_tmdb(title_clean, year, media)
+    if not torrent:
+        print(f"ERRORE Torrent {hash_} non trovato")
+        return 1
 
-if tmdb_title:
-    folder_name = safe_name(tmdb_title)
-    if is_film and tmdb_year:
-        folder_name = f"{folder_name} ({tmdb_year})"
-    source = "TMDB"
-else:
-    folder_name = safe_name(title_clean)
-    if is_film and year:
-        folder_name = f"{folder_name} ({year})"
-    source = "FALLBACK"
+    name = torrent['name']
+    save_path = torrent['save_path'].rstrip('/')
+    route = route_for_path(save_path)
 
-base_dir = FILM_DIR if is_film else SERIE_DIR
-dst_dir  = os.path.join(base_dir, folder_name)
+    if route != 'skip':
+        try:
+            qb_pause(hash_, app_version)
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            print(f"ERRORE Impossibile mettere in pausa il torrent: {error}")
+            return 1
 
-os.makedirs(dst_dir, exist_ok=True)
-try:
-    qb_post("/api/v2/torrents/setLocation", {"hashes": HASH, "location": dst_dir})
-except (urllib.error.URLError, OSError) as e:
-    detail = e.read().decode(errors='replace') if isinstance(e, urllib.error.HTTPError) else str(e)
-    print(f"ERRORE setLocation fallito: {detail}")
-    qb_start(HASH)  # non lasciare il torrent fermo per sempre
-    sys.exit(1)
+    cleanup_empty_folders()
 
-if START_AFTER_SET:
-    qb_start(HASH)
+    if route == 'skip':
+        print(f"SKIP Ignorato (fuori da INBOX/FILM/SERIE): {name}")
+        return 0
 
-print(f"OK [{source}] {folder_name}")
-print(f"   Percorso impostato: {dst_dir}")
+    classification = classify_torrent(name, route)
+    if not classification:
+        print(f"IN ATTESA Tipo non riconosciuto da TMDB: {name}")
+        print(f"   Torrent lasciato in pausa: {save_path}")
+        return 0
+
+    base_dir = FILM_DIR if classification.media == 'movie' else SERIE_DIR
+    dst_dir = os.path.join(base_dir, classification.folder_name)
+    if not relocate_torrent(
+            hash_, dst_dir, app_version, start_after_set=START_AFTER_SET):
+        print("   Torrent lasciato in pausa per evitare il download nel percorso errato")
+        return 1
+
+    print(
+        f"OK [{classification.source}] "
+        f"{'FILM' if classification.media == 'movie' else 'SERIE'}: "
+        f"{classification.folder_name}")
+    print(f"   Percorso impostato: {dst_dir}")
+    print(f"   qBittorrent {app_version} / WebAPI {webapi_version}")
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
