@@ -1,58 +1,21 @@
-Copyright (c) 2024 SiNaPsEr0x
-All rights reserved.
+MIT License
 
-─────────────────────────────────────────────────────────────────────────────
-LICENZA D'USO — VISUALIZZAZIONE E CONTRIBUZIONE LIBERA, MODIFICHE RISERVATE
-─────────────────────────────────────────────────────────────────────────────
+Copyright (c) 2024-2026 SiNaPsEr0x
 
-1. PERMESSI CONCESSI
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-   a) È consentito usare questo software per qualsiasi scopo, personale o
-      professionale, senza alcuna restrizione.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-   b) È consentito copiare e distribuire questo software nella sua forma
-      ORIGINALE e NON MODIFICATA, purché sia inclusa questa licenza e
-      venga citato l'autore originale.
-
-   c) È consentito consultare, studiare e analizzare il codice sorgente
-      per scopi educativi o di apprendimento.
-
-2. RESTRIZIONI
-
-   a) NON è consentito distribuire, pubblicare o condividere versioni
-      MODIFICATE di questo software, né come fork pubblico né come
-      progetto derivato, senza previa approvazione scritta dell'autore.
-
-   b) NON è consentito rimuovere, alterare o oscurare questa licenza,
-      il copyright o i riferimenti all'autore originale.
-
-   c) NON è consentito utilizzare il nome dell'autore o del progetto per
-      promuovere prodotti o servizi derivati senza autorizzazione.
-
-3. CONTRIBUZIONI
-
-   Chiunque desideri migliorare, correggere o estendere questo software
-   è invitato a farlo ESCLUSIVAMENTE tramite Pull Request al repository
-   originale:
-
-       https://github.com/SiNaPsEr0x/qbittorrent-tmdb-organizer
-
-   L'accettazione, il rifiuto o la modifica di qualsiasi contribuzione
-   è a esclusiva discrezione dell'autore. Le contribuzioni accettate
-   rimangono soggette a questa stessa licenza.
-
-4. NESSUNA GARANZIA
-
-   Questo software è fornito "così com'è" (AS IS), senza garanzie di
-   alcun tipo, esplicite o implicite, incluse ma non limitate a garanzie
-   di commerciabilità, idoneità a uno scopo specifico o non violazione
-   di diritti di terzi.
-
-   In nessun caso l'autore sarà responsabile per danni diretti, indiretti,
-   incidentali, speciali o consequenziali derivanti dall'uso o
-   dall'impossibilità di usare questo software.
-
-─────────────────────────────────────────────────────────────────────────────
-In sintesi: puoi usarlo liberamente, puoi studiarlo, puoi proporre modifiche
-tramite PR. Non puoi distribuire versioni modificate senza autorizzazione.
-─────────────────────────────────────────────────────────────────────────────
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
